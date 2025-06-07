@@ -30,6 +30,7 @@ type Setting =
   | 'hide_dashcard_color_overlays'
   | 'comment_library_suggestions_enabled'
   | 'elementary_dashboard_disabled'
+  | 'suppress_assignments'
 
 type Role = {
   addable_by_user: boolean
@@ -277,6 +278,7 @@ export interface EnvCommon {
   top_navigation_tools: Tool[]
 
   BLUEPRINT_COURSES_DATA: BlueprintCoursesData | undefined
+  AI_FEEDBACK_LINK?: string
 }
 
 /**
@@ -338,6 +340,7 @@ export type RootAccountFeatureId =
   | 'course_pace_allow_bulk_pace_assign'
   | 'disable_iframe_sandbox_file_show'
   | 'ams_service'
+  | 'lti_apps_page_ai_translation'
 
 /**
  * From ApplicationController#JS_ENV_ROOT_ACCOUNT_SERVICES

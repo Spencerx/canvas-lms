@@ -33,8 +33,7 @@ import {Heading} from '@instructure/ui-heading'
 import {Text} from '@instructure/ui-text'
 import {SimpleSelect} from '@instructure/ui-simple-select'
 import {Flex} from '@instructure/ui-flex'
-import {IconEyeLine, IconAiSolid} from '@instructure/ui-icons'
-import {IgniteAiIcon} from '@canvas/ignite-ai-icon/react/IgniteAiIcon'
+import {IconEyeLine, IconAiSolid, IconAiColoredSolid} from '@instructure/ui-icons'
 import {Button} from '@instructure/ui-buttons'
 import {Link} from '@instructure/ui-link'
 import {RubricCriteriaRow} from './RubricCriteriaRow'
@@ -149,6 +148,7 @@ export const RubricForm = ({
   const [showGenerateCriteriaForm, setShowGenerateCriteriaForm] = useState(
     aiRubricsEnabled && !!assignmentId && !rubric?.id,
   )
+  const [showGenerateCriteriaHeader, setShowGenerateCriteriaHeader] = useState(false)
   const [currentProgress, setCurrentProgress] = useState<CanvasProgress>()
   const criteriaRef = useRef(rubricForm.criteria)
 
@@ -357,6 +357,7 @@ export const RubricForm = ({
         })),
       ]
       setShowGenerateCriteriaForm(false)
+      setShowGenerateCriteriaHeader(true)
       setRubricFormField('criteria', newCriteria)
       setRubricFormField('pointsPossible', calcPointsPossible(newCriteria))
     } else if (progress.workflow_state === 'failed') {
@@ -613,7 +614,7 @@ export const RubricForm = ({
             >
               <Heading level="h4">
                 <Flex alignItems="center" gap="small">
-                  <IgniteAiIcon />
+                  <IconAiColoredSolid />
                   <Text>{I18n.t('Auto-Generate Criteria')}</Text>
                 </Flex>
               </Heading>
@@ -728,18 +729,51 @@ export const RubricForm = ({
                   />
                 </Flex.Item>
                 <Flex.Item>
-                  <span className="instui-button-ignite-ai-gradient">
-                    <Button
-                      onClick={handleGenerateButton}
-                      data-testid="generate-criteria-button"
-                      color="primary"
-                      renderIcon={<IconAiSolid />}
-                      disabled={generateCriteriaForm.additionalPromptInfo.length > 1000}
-                    >
-                      {I18n.t('Generate Criteria')}
-                    </Button>
-                  </span>
+                  <Button
+                    onClick={handleGenerateButton}
+                    data-testid="generate-criteria-button"
+                    color="ai-primary"
+                    renderIcon={<IconAiSolid />}
+                    disabled={generateCriteriaForm.additionalPromptInfo.length > 1000}
+                  >
+                    {I18n.t('Generate Criteria')}
+                  </Button>
                 </Flex.Item>
+              </Flex>
+            </View>
+          )}
+
+          {showGenerateCriteriaHeader && (
+            <View
+              as="div"
+              margin="medium 0 small 0"
+              padding="small"
+              borderRadius="medium"
+              background="secondary"
+              data-testid="generate-criteria-header"
+            >
+              <Flex gap="medium">
+                <Flex.Item>
+                  <Heading level="h4">
+                    <Flex alignItems="center" gap="small">
+                      <IconAiColoredSolid />
+                      <Text>{I18n.t('Auto-Generate Criteria')}</Text>
+                    </Flex>
+                  </Heading>
+                </Flex.Item>
+                <Flex.Item shouldGrow={true}></Flex.Item>
+                {window.ENV.AI_FEEDBACK_LINK && (
+                  <Flex.Item>
+                    <a
+                      data-testid="give-feedback-link"
+                      href={window.ENV.AI_FEEDBACK_LINK}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {I18n.t('Give Feedback')}
+                    </a>
+                  </Flex.Item>
+                )}
               </Flex>
             </View>
           )}

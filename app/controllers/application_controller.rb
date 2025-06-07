@@ -278,7 +278,8 @@ class ApplicationController < ActionController::Base
             collapse_global_nav: @current_user&.collapse_global_nav?,
             release_notes_badge_disabled: @current_user&.release_notes_badge_disabled?,
             can_add_pronouns: @domain_root_account&.can_add_pronouns?,
-            show_sections_in_course_tray: @domain_root_account&.show_sections_in_course_tray?
+            show_sections_in_course_tray: @domain_root_account&.show_sections_in_course_tray?,
+            suppress_assignments: @domain_root_account&.suppress_assignments?
           },
           RAILS_ENVIRONMENT: Canvas.environment
         }
@@ -2501,7 +2502,7 @@ class ApplicationController < ActionController::Base
       # i don't know if we really need this but in case these expired tokens are a client caching issue,
       # let's throw an extra param in the fallback so we hopefully don't infinite loop
       fallback_url += (query.present? ? "&" : "?") + "fallback_ts=#{Time.now.to_i}"
-
+      authorization ||= { attachment: } if Account.site_admin.feature_enabled?(:safe_files_token)
       opts = generate_access_verifier(return_url:, fallback_url:, authorization:)
       opts[:verifier] = verifier if verifier.present?
 
@@ -3399,5 +3400,9 @@ class ApplicationController < ActionController::Base
     allowed = allowed_dirs.any? { |base_dir| full_path.ascend.include?(base_dir) }
     reject! "Invalid file path" unless allowed
     send_file(full_path.to_s, options)
+  end
+
+  def inject_ai_feedback_link
+    js_env(AI_FEEDBACK_LINK: Setting.get("ai_feedback_link", "https://inst.bid/ai/feedback"))
   end
 end
