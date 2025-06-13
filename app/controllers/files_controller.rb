@@ -411,7 +411,7 @@ class FilesController < ApplicationController
     if authorized_action(@context, @current_user, [:read_files, *RoleOverride::GRANULAR_FILE_PERMISSIONS]) &&
        tab_enabled?(@context.class::TAB_FILES)
       @contexts = [@context]
-      files_version_2 = Account.site_admin.feature_enabled?(:files_a11y_rewrite) && (!Account.site_admin.feature_enabled?(:files_a11y_rewrite_toggle) || @current_user.files_ui_version != "v1")
+      files_version_2 = files_version_2?
       get_all_pertinent_contexts(include_groups: true, cross_shard: true) if @context == @current_user
 
       root_folders_by_context = {}
@@ -572,7 +572,7 @@ class FilesController < ApplicationController
 
     params[:include] = Array(params[:include])
     if access_allowed(attachment: @attachment, user: @current_user, access_type: :read)
-      options = { include: params[:include], location: params[:location], verifier: params[:verifier], omit_verifier_in_app: !value_to_boolean(params[:use_verifiers]) }
+      options = { include: params[:include], omit_verifier_in_app: !value_to_boolean(params[:use_verifiers]) }
       if params[:access_token].present? && params[:instfs_id].present?
         options[:access_token] = params[:access_token]
         options[:instfs_id] = params[:instfs_id]
@@ -586,7 +586,7 @@ class FilesController < ApplicationController
         options[:context] = @context || @folder&.context || @attachment.context
         options[:can_view_hidden_files] = can_view_hidden_files?(options[:context], @current_user, session)
       end
-      json = attachment_json(@attachment, @current_user, {}, options)
+      json = attachment_json(@attachment, @current_user, { verifier: params[:verifier], location: params[:location] }, options)
 
       # Add canvadoc session URL if the file is unlocked
       json.merge!(
@@ -681,7 +681,20 @@ class FilesController < ApplicationController
       end
 
       if @attachment.inline_content? && params[:sf_verifier] && redirect_for_inline?(params[:sf_verifier])
-        return redirect_to url_for(params.to_unsafe_h.except(:sf_verifier))
+        # with cross-site cookie protections, we can't set the cookie on the files domain
+        # and we can't leave the sf_verifier in the url because of security issues (FOO-2918)
+        sf_token = {}
+        begin
+          # User files need a verifier to grant access anyway, so the token is redundant
+          if Account.site_admin.feature_enabled?(:safe_files_token) && !@context.is_a?(User)
+            validate_access_verifier
+            sf_token = SecureRandom.hex(16)
+            Rails.cache.write("sf_token:#{sf_token}", { full_path: @attachment.full_path, used: false }, expires_in: 5.minutes)
+          end
+        rescue Canvas::Security::TokenExpired, Users::AccessVerifier::InvalidVerifier
+          nil
+        end
+        return redirect_to url_for(params.to_unsafe_h.except(:sf_verifier).merge(sf_token:))
       end
 
       params[:download] ||= params[:preview]
@@ -809,7 +822,7 @@ class FilesController < ApplicationController
                          end
 
           json[:attachment].merge!(
-            attachment_json(attachment, @current_user, {}, json_include.merge(verifier: params[:verifier]))
+            attachment_json(attachment, @current_user, { verifier: params[:verifier] }, json_include)
           )
 
           # Add canvadoc session URL if the file is unlocked
@@ -1208,7 +1221,7 @@ class FilesController < ApplicationController
     end
 
     render status: :created,
-           json: attachment_json(@attachment, @attachment.user, {}, { include: includes, verifier: params[:verifier] }),
+           json: attachment_json(@attachment, @attachment.user, { verifier: params[:verifier] }, { include: includes }),
            location: api_v1_attachment_url(@attachment, include: includes)
   end
 
@@ -1399,7 +1412,7 @@ class FilesController < ApplicationController
       end
       if @attachment.save
         @attachment.handle_duplicates(on_duplicate) if on_duplicate
-        render json: attachment_json(@attachment, @current_user, {}, { omit_verifier_in_app: true, verifier: params[:verifier] })
+        render json: attachment_json(@attachment, @current_user, { verifier: params[:verifier] }, { omit_verifier_in_app: true })
       else
         render json: @attachment.errors, status: :bad_request
       end
@@ -1569,7 +1582,7 @@ class FilesController < ApplicationController
     @context = @attachment.context
     if can_replace_file?
       @attachment.reset_uuid!
-      render json: attachment_json(@attachment, @current_user, {}, { omit_verifier_in_app: true, verifier: params[:verifier] })
+      render json: attachment_json(@attachment, @current_user, { verifier: params[:verifier] }, { omit_verifier_in_app: true })
     else
       render_unauthorized_action
     end
@@ -1689,6 +1702,18 @@ class FilesController < ApplicationController
   end
 
   private
+
+  def files_version_2?
+    unless Account.site_admin.feature_enabled?(:files_a11y_rewrite)
+      return false
+    end
+
+    unless @current_user
+      return true
+    end
+
+    !Account.site_admin.feature_enabled?(:files_a11y_rewrite_toggle) || @current_user.files_ui_version != "v1"
+  end
 
   def quota_exempt?
     @attachment.verify_quota_exemption_key(params[:quota_exemption]) ||

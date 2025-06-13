@@ -64,6 +64,7 @@ module Api::V1::Assignment
       moderated_grading
       hide_in_gradebook
       omit_from_final_grade
+      suppress_assignment
       anonymous_instructor_annotations
       anonymous_grading
       allowed_attempts
@@ -161,6 +162,7 @@ module Api::V1::Assignment
     hash["lti_context_id"] = assignment.lti_context_id if assignment.has_attribute?(:lti_context_id)
     hash["course_id"] = assignment.context_id
     hash["name"] = assignment.title
+    hash["suppress_assignment"] = assignment.suppress_assignment
     hash["submission_types"] = assignment.submission_types_array
     hash["has_submitted_submissions"] = assignment.has_submitted_submissions?
     hash["due_date_required"] = assignment.due_date_required?
@@ -378,10 +380,10 @@ module Api::V1::Assignment
           hash["all_dates"] = []
 
           assignment.sub_assignments.each do |sub_assignment|
-            hash["all_dates"].concat(sub_assignment.formatted_dates_hash_visible_to(user))
+            hash["all_dates"].concat(sub_assignment.dates_hash_visible_to(user))
           end
         elsif override_count < ALL_DATES_LIMIT
-          hash["all_dates"] = assignment.formatted_dates_hash_visible_to(user)
+          hash["all_dates"] = assignment.dates_hash_visible_to(user)
         else
           hash["all_dates_count"] = override_count
         end
@@ -581,6 +583,7 @@ module Api::V1::Assignment
     integration_id
     hide_in_gradebook
     omit_from_final_grade
+    suppress_assignment
     anonymous_instructor_annotations
     allowed_attempts
     important_dates
@@ -1352,6 +1355,7 @@ module Api::V1::Assignment
       { "external_tool_tag_attributes" => strong_anything },
       ({ "submission_types" => strong_anything } if should_update_submission_types),
       { "ab_guid" => strong_anything },
+      ({ "suppress_assignment" => strong_anything } if assignment.root_account.suppress_assignments?),
       ({ "estimated_duration_attributes" => strong_anything } if estimated_duration_enabled?(assignment)),
     ].compact
   end

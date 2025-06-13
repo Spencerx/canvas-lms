@@ -1717,10 +1717,13 @@ class Attachment < ActiveRecord::Base
     reload
   end
 
-  def self.batch_destroy(attachments)
+  def self.not_deleted_content_tags_for_attachments(attachments)
     ContentTag.not_deleted.where(content_type: "Attachment", content_id: attachments)
               .union(ContentTag.not_deleted.where(context_type: "Attachment", context_id: attachments))
-              .find_each(&:destroy)
+  end
+
+  def self.batch_destroy(attachments)
+    not_deleted_content_tags_for_attachments(attachments).find_each(&:destroy)
     while MediaObject.where(attachment_id: attachments).limit(1000).update_all(attachment_id: nil, updated_at: Time.now.utc) > 0 do end
     Lti::Asset.where(attachment_id: attachments).in_batches(of: 1000).destroy_all
     # if the attachment being deleted belongs to a user and the uuid (hash of file) matches the avatar_image_url
@@ -1847,7 +1850,13 @@ class Attachment < ActiveRecord::Base
     end
 
     shard.activate do
-      InstFS.delete_file(instfs_uuid) unless Attachment.where(instfs_uuid:).exists?
+      # any linked Canvadoc retains the old instfs_uuid, and deleting it would break re-rendering
+      return if Canvadoc.where(attachment_id: self).exists?
+
+      # double-check that no other attachments are using this instfs_uuid
+      return if Attachment.where(instfs_uuid:).exists?
+
+      InstFS.delete_file(instfs_uuid)
     end
   end
 

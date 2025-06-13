@@ -47,6 +47,8 @@ module Types
 
     global_id_field :id
 
+    field :first_name, HtmlEncodedStringType, null: true
+    field :last_name, HtmlEncodedStringType, null: true
     field :name, HtmlEncodedStringType, null: true
     field :short_name,
           HtmlEncodedStringType,
@@ -183,10 +185,12 @@ module Types
                required: false
     end
 
+    # TODO: handle N+1
     field :login_id, String, null: true
     def login_id
       course = context[:course]
       return nil unless course
+      return nil unless course.grants_right?(current_user, session, :view_user_logins)
 
       pseudonym = SisPseudonym.for(
         object,
@@ -196,7 +200,7 @@ module Types
         root_account: context[:domain_root_account],
         in_region: true
       )
-      return nil unless pseudonym && course.grants_right?(context[:current_user], context[:session], :view_user_logins)
+      return nil unless pseudonym
 
       pseudonym.unique_id
     end
@@ -383,6 +387,13 @@ module Types
 
       # Normalize recipients should remove any observers that the current user is not able to message
       normalize_recipients(recipients: course_observers_observing_recipients_ids, context_code:)
+    end
+
+    field :group_memberships, [GroupMembershipType], null: false do
+      argument :filter, Types::UserGroupMembershipsFilterInputType, required: false
+    end
+    def group_memberships(filter: {})
+      Loaders::UserLoaders::GroupMembershipsLoader.for(filter:).load(object.id)
     end
 
     # TODO: deprecate this

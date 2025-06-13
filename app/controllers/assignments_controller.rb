@@ -492,6 +492,7 @@ class AssignmentsController < ApplicationController
         append_default_due_time_js_env(@context, hash)
         js_env(hash)
         enhanced_rubrics_assignments_js_env(@assignment) if Rubric.enhanced_rubrics_assignments_enabled?(@context)
+        inject_ai_feedback_link
 
         set_master_course_js_env_data(@assignment, @context)
         conditional_release_js_env(@assignment, includes: :rule)
@@ -831,6 +832,9 @@ class AssignmentsController < ApplicationController
       @assignment.submission_types = params[:submission_types] if params[:submission_types]
       @assignment.assignment_group_id = params[:assignment_group_id] if params[:assignment_group_id]
       @assignment.ensure_assignment_group(false)
+      if @context.root_account.suppress_assignments?
+        @assignment.suppress_assignment = value_to_boolean(params[:suppress_assignment]) if params.key?(:suppress_assignment)
+      end
 
       if params.key?(:post_to_sis)
         @assignment.post_to_sis = value_to_boolean(params[:post_to_sis])
@@ -1162,6 +1166,7 @@ class AssignmentsController < ApplicationController
                   :integration_id,
                   :moderated_grading,
                   :omit_from_final_grade,
+                  :suppress_assignment,
                   :hide_in_gradebook,
                   :intra_group_peer_reviews,
                   :important_dates,

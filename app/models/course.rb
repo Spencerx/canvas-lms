@@ -3231,6 +3231,7 @@ class Course < ActiveRecord::Base
   TAB_COURSE_PACES = 20
   TAB_SEARCH = 21
   TAB_ACCESSIBILITY = 22
+  TAB_ITEM_BANKS = 23
 
   CANVAS_K6_TAB_IDS = [TAB_HOME, TAB_ANNOUNCEMENTS, TAB_GRADES, TAB_MODULES].freeze
   COURSE_SUBJECT_TAB_IDS = [TAB_HOME, TAB_SCHEDULE, TAB_MODULES, TAB_GRADES, TAB_GROUPS].freeze
@@ -3428,13 +3429,14 @@ class Course < ActiveRecord::Base
                      Course.default_tabs
                    end
 
-    if feature_enabled?(:accessibility_tab_enable)
+    if Account.site_admin.feature_enabled?(:accessibility_dashboard_feature) && feature_enabled?(:accessibility_tab_enable)
       default_tabs.insert(1,
                           {
                             id: TAB_ACCESSIBILITY,
                             label: t("#tabs.accessibility", "Accessibility"),
                             css_class: "accessibility",
-                            href: :course_accessibility_path
+                            href: :course_accessibility_path,
+                            visibility: "admins"
                           })
     end
 
@@ -3503,6 +3505,19 @@ class Course < ActiveRecord::Base
       end
       tabs += default_tabs
       tabs += external_tabs
+
+      if root_account.feature_enabled?(:ams_service) && tabs.any? { |t| t[:label] == "Item Banks" }
+        ams_item_banks_tab = {
+          id: TAB_ITEM_BANKS,
+          label: t("#tabs.item_banks", "Item Banks"),
+          css_class: "item_banks",
+          href: :course_item_banks_path,
+        }
+
+        item_banks_index = tabs.find_index { |t| t[:label] == "Item Banks" }
+        tabs.delete_at(item_banks_index)
+        tabs.insert(item_banks_index, ams_item_banks_tab)
+      end
 
       tabs.delete_if { |t| t[:id] == TAB_SETTINGS }
       if course_subject_tabs

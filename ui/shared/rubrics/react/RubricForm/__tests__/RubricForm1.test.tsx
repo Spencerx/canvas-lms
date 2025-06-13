@@ -25,9 +25,9 @@ import {RUBRIC_CRITERIA_IGNORED_FOR_SCORING, RUBRICS_QUERY_RESPONSE} from './fix
 import * as RubricFormQueries from '../queries/RubricFormQueries'
 import * as ProgressHelpers from '@canvas/progress/ProgressHelpers'
 import FindDialog from '@canvas/outcomes/backbone/views/FindDialog'
-import {reorder} from '../CriterionModal'
-import {WarningModal} from '../WarningModal'
+import {WarningModal} from '../components/WarningModal'
 import {destroyContainer as destroyFlashAlertContainer} from '@canvas/alerts/react/FlashAlert'
+import {reorderRatingsAtIndex} from '../../utils'
 
 jest.mock('../queries/RubricFormQueries', () => ({
   ...jest.requireActual('../queries/RubricFormQueries'),
@@ -370,7 +370,7 @@ describe('RubricForm Tests', () => {
       const startIndex = 0
       const endIndex = 2
 
-      const reorderedCriteria = reorder({list: criteria, startIndex, endIndex})
+      const reorderedCriteria = reorderRatingsAtIndex({list: criteria, startIndex, endIndex})
 
       expect(reorderedCriteria[0]).toEqual(criteria[1])
       expect(reorderedCriteria[1]).toEqual(criteria[2])
@@ -849,6 +849,51 @@ describe('RubricForm Tests', () => {
       expect(document.querySelector('#flashalert_message_holder')).toHaveTextContent(
         'Failed to generate criteria',
       )
+    })
+
+    it('shows the feedback link after criteria are generated', async () => {
+      window.ENV = {
+        ...window.ENV,
+        AI_FEEDBACK_LINK: 'https://example.com/feedback',
+      }
+
+      const generateCriteriaMock = RubricFormQueries.generateCriteria as jest.Mock
+      generateCriteriaMock.mockResolvedValue({
+        id: 1,
+        workflow_state: 'running',
+        message: null,
+        completion: 1,
+      })
+
+      const progressUpdateMock = ProgressHelpers.monitorProgress as jest.Mock
+      progressUpdateMock.mockImplementation(
+        (
+          progressId: string,
+          setCurrentProgress: (progress: ProgressHelpers.CanvasProgress) => void,
+          _onFetchError: (error: Error) => void,
+        ) => {
+          setCurrentProgress({
+            id: progressId,
+            workflow_state: 'completed',
+            message: null,
+            completion: 100,
+            results: {criteria: mockCriteria},
+          })
+        },
+      )
+
+      const {getByTestId} = renderComponent({
+        aiRubricsEnabled: true,
+        assignmentId: '1',
+        courseId: '1',
+      })
+
+      const generateButton = getByTestId('generate-criteria-button')
+      fireEvent.click(generateButton)
+
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(getByTestId('give-feedback-link')).toHaveTextContent('Give Feedback')
     })
   })
 

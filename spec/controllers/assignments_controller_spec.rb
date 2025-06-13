@@ -766,24 +766,28 @@ describe AssignmentsController do
 
       let(:assignment) { assignment_model }
       let(:launch_url) { "https://www.my-tool.com/login" }
-      let(:key) do
-        DeveloperKey.create!(
-          scopes: [
-            TokenScopes::LTI_AGS_LINE_ITEM_SCOPE,
-            TokenScopes::LTI_AGS_LINE_ITEM_READ_ONLY_SCOPE,
-            TokenScopes::LTI_AGS_RESULT_READ_ONLY_SCOPE,
-            TokenScopes::LTI_AGS_SCORE_SCOPE
-          ]
-        )
-      end
       let(:external_tool) do
-        external_tool_1_3_model(
-          context: assignment.course,
-          opts: {
-            url: launch_url,
-            developer_key: key
+        lti_registration_with_tool(
+          account: assignment.root_account,
+          configuration_params: {
+            domain: "www.my-tool.com",
+            target_link_uri: launch_url,
+            oidc_initiation_url: launch_url,
+            placements: [
+              {
+                placement: "course_navigation"
+              }
+            ]
+          },
+          developer_key_params: {
+            scopes: [
+              TokenScopes::LTI_AGS_LINE_ITEM_SCOPE,
+              TokenScopes::LTI_AGS_LINE_ITEM_READ_ONLY_SCOPE,
+              TokenScopes::LTI_AGS_RESULT_READ_ONLY_SCOPE,
+              TokenScopes::LTI_AGS_SCORE_SCOPE
+            ]
           }
-        )
+        ).deployments.first
       end
 
       before do
@@ -2705,6 +2709,22 @@ describe AssignmentsController do
       user_session(@teacher)
       get :edit, params: { course_id: @course.id, id: @assignment.id }
       expect(assigns[:js_env][:MODERATED_GRADING_MAX_GRADER_COUNT]).to eq @assignment.moderated_grading_max_grader_count
+    end
+
+    context "when the account has suppress_assignments setting on" do
+      before do
+        account = @course.root_account
+        account.settings[:suppress_assignments] = true
+        account.save
+      end
+
+      it "reflects assignment.suppress_assignment when given query parameter suppress_assignment" do
+        user_session(@teacher)
+        expect(@assignment.suppress_assignment).to be(false) # default
+        get "edit", params: { course_id: @course.id, id: @assignment.id, suppress_assignment: true }
+        expect(assigns[:assignment]).to eql(@assignment)
+        expect(assigns[:assignment].suppress_assignment).to be(true)
+      end
     end
 
     context "when the root account does not have a default tool url set" do

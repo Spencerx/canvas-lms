@@ -55,16 +55,41 @@ RSpec.describe Lti::AssetReport do
         end
       end
 
-      it "rejects fields in 'extensions' that do not have a url scheme" do
-        expect(lti_asset_report_model(extensions: { "http://valid.url" => "value" })).to be_valid
-        expect(lti_asset_report_model(extensions: { "https://valid.url" => "value" })).to be_valid
-        expect do
-          lti_asset_report_model(extensions: { "invalid.url" => "value" })
-        end.to raise_error(ActiveRecord::RecordInvalid, /invalid.url.*extensions property keys must be namespaced \(URIs\)/)
+      it "filters out non-URL scheme fields in 'extensions' and remains valid" do
+        # Case 1: Only valid http URL
+        report1 = lti_asset_report_model(extensions: { "http://valid.url" => "value" })
+        expect(report1).to be_valid
+        expect(report1.extensions).to eq({ "http://valid.url" => "value" })
 
-        expect do
-          lti_asset_report_model(extensions: { "invalid.url" => "value", "https://valid.url" => "value" })
-        end.to raise_error(ActiveRecord::RecordInvalid, /extensions property keys must be namespaced \(URIs\)/)
+        # Case 2: Only valid https URL
+        report2 = lti_asset_report_model(extensions: { "https://valid.url" => "value" })
+        expect(report2).to be_valid
+        expect(report2.extensions).to eq({ "https://valid.url" => "value" })
+
+        # Case 3: Only invalid URL (should be filtered out)
+        report3 = lti_asset_report_model(extensions: { "invalid.url" => "value" })
+        expect(report3).to be_valid
+        expect(report3.extensions).to be_empty
+
+        # Case 4: Mix of invalid and valid URLs (invalid should be filtered, valid should remain)
+        report4 = lti_asset_report_model(extensions: { "invalid.url" => "value", "https://valid.url" => "another_value" })
+        expect(report4).to be_valid
+        expect(report4.extensions).to eq({ "https://valid.url" => "another_value" })
+
+        # Case 5: Non-string key (should be filtered out)
+        report5 = lti_asset_report_model(extensions: { :symbol_key => "value", "http://another.valid.url" => "yet_another_value" })
+        expect(report5).to be_valid
+        expect(report5.extensions).to eq({ "http://another.valid.url" => "yet_another_value" })
+
+        # Case 6: Extensions is nil (should remain empty and be valid)
+        report6 = lti_asset_report_model(extensions: nil)
+        expect(report6).to be_valid
+        expect(report6.extensions).to be_empty
+
+        # Case 7: Extensions is an empty hash (should remain empty and be valid)
+        report7 = lti_asset_report_model(extensions: {})
+        expect(report7).to be_valid
+        expect(report7.extensions).to be_empty
       end
     end
 
@@ -144,8 +169,8 @@ RSpec.describe Lti::AssetReport do
     let(:rep1bIi) { lti_asset_report_model(asset: asset1b, asset_processor: processorI) }
 
     # Student 2 (submission 2) reports:
-    let(:rep2aIi) { lti_asset_report_model(asset: asset2a, asset_processor: processorI) }
-    let(:rep2aIIi) { lti_asset_report_model(asset: asset2a, asset_processor: processorII) }
+    let(:rep2aIi) { lti_asset_report_model(asset: asset2a, asset_processor: processorI, visible_to_owner: false) }
+    let(:rep2aIIi) { lti_asset_report_model(asset: asset2a, asset_processor: processorII, visible_to_owner: true) }
 
     it "organizes reports by submission and attachment" do
       expect(subject.keys).to match_array([sub1.id, sub2.id])
@@ -192,6 +217,22 @@ RSpec.describe Lti::AssetReport do
       it "does not include the reports" do
         expect(subject[sub2.id][:by_attachment][att2a.id].keys).not_to \
           include(processorII.id)
+      end
+    end
+
+    context "when listing for a student" do
+      subject do
+        # Ensure the factory objects are created
+        [rep2aIi, rep2aIIi]
+        Lti::AssetReport.info_for_display_by_submission(submission_ids: [sub2.id], for_student: true)
+      end
+
+      it "only includes reports visible to the owner" do
+        expect(subject.keys).to match_array([sub2.id])
+        expect(subject[sub2.id][:by_attachment].keys).to match_array([att2a.id])
+        expect(subject[sub2.id][:by_attachment][att2a.id].keys).to include(processorII.id)
+        expect(subject[sub2.id][:by_attachment][att2a.id][processorII.id].map { _1[:_id] }).to \
+          match_array([rep2aIIi.id])
       end
     end
 
@@ -319,6 +360,45 @@ RSpec.describe Lti::AssetReport do
       let(:processing_progress) { "Processed" }
 
       it { is_expected.to be false }
+    end
+  end
+
+  describe "#visible_to_user?" do
+    let(:course) { course_model }
+    let(:student) { student_in_course(active_all: true, course:).user }
+    let(:student2) { student_in_course(active_all: true, course:).user }
+    let(:teacher) { teacher_in_course(active_all: true, course:).user }
+    let(:assignment) { assignment_model(course:) }
+    let(:submission) { submission_model(user: student, assignment:) }
+    let(:asset) { lti_asset_model(submission:) }
+    let(:asset_processor) { lti_asset_processor_model(assignment:) }
+
+    context "when visible_to_owner is true" do
+      let(:report) { lti_asset_report_model(asset:, asset_processor:, visible_to_owner: true) }
+
+      it "returns true for the owner student" do
+        expect(report.visible_to_user?(student)).to be true
+      end
+
+      it "returns false for another student" do
+        expect(report.visible_to_user?(student2)).to be false
+      end
+
+      it "returns true for a teacher" do
+        expect(report.visible_to_user?(teacher)).to be true
+      end
+    end
+
+    context "when visible_to_owner is false" do
+      let(:report) { lti_asset_report_model(asset:, asset_processor:) }
+
+      it "returns false for the owner student" do
+        expect(report.visible_to_user?(student)).to be false
+      end
+
+      it "returns true for a teacher" do
+        expect(report.visible_to_user?(teacher)).to be true
+      end
     end
   end
 end

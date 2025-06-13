@@ -59,16 +59,11 @@ class ActiveRecord::Base
       ].map do |method|
         next unless method
 
-        search_name = if RUBY_VERSION >= "3.4.0"
-                        owner_str = method.owner.to_s
-
-                        if owner_str =~ /\A#<Class:(.+)>\z/
-                          "'#{Regexp.last_match(1)}.#{method.name}'"
-                        else
-                          "'#{owner_str}##{method.name}'"
-                        end
+        owner_str = method.owner.to_s
+        search_name = if owner_str =~ /\A#<Class:(.+)>\z/
+                        "'#{Regexp.last_match(1)}.#{method.name}'"
                       else
-                        "`#{method.name}'"
+                        "'#{owner_str}##{method.name}'"
                       end
 
         regex = /\A#{Regexp.escape(method.source_location.first)}:\d+:in #{Regexp.escape(search_name)}\z/
@@ -2306,5 +2301,21 @@ module RollbackIgnoreNonDatedMigrations
   end
 end
 ActiveRecord::MigrationContext.prepend(RollbackIgnoreNonDatedMigrations)
+
+class NullSchemaMigration
+  def create_table; end
+  def integer_versions = []
+end
+
+module WithMigrationAdvisoryLock
+  def with_advisory_lock(&)
+    return yield if ActiveRecord::Base.in_migration
+
+    ActiveRecord::MigrationContext.new([], NullSchemaMigration.new)
+                                  .open
+                                  .send(:with_advisory_lock, &)
+  end
+end
+ActiveRecord::Migrator.singleton_class.include(WithMigrationAdvisoryLock)
 
 ActiveRecord::Enum.prepend(Extensions::ActiveRecord::Enum)

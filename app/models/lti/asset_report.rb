@@ -68,6 +68,8 @@ class Lti::AssetReport < ApplicationRecord
     PRIORITY_TIME_CRITICAL = 5
   ].freeze
 
+  before_validation :filter_non_namespaced_extension_keys
+
   validates :timestamp, presence: true
   # report_type is "type" from the 1EdTech spec (Rails prevents us from naming column 'type')
   validates :report_type,
@@ -89,6 +91,7 @@ class Lti::AssetReport < ApplicationRecord
   validates :error_code, length: { minimum: 1, maximum: 1024 }, allow_nil: true
   validates :priority, inclusion: { in: PRIORITIES }
   validates :processing_progress, presence: true
+  validates :visible_to_owner, inclusion: { in: [true, false] }
 
   validate :validate_extensions
   validate :validate_asset_compatible_with_processor
@@ -109,6 +112,14 @@ class Lti::AssetReport < ApplicationRecord
     end
   end
 
+  def filter_non_namespaced_extension_keys
+    return if extensions.blank?
+
+    self.extensions = extensions.select do |key, _value|
+      key.is_a?(String) && key.start_with?("http://", "https://")
+    end
+  end
+
   MAX_EXTENSIONS_SIZE = 1.megabyte
 
   def validate_extensions
@@ -117,11 +128,6 @@ class Lti::AssetReport < ApplicationRecord
     # rough size limit just to keep things reasonable
     if extensions.inspect.length > MAX_EXTENSIONS_SIZE
       errors.add(:extensions, "size limit exceeded")
-    end
-
-    bad_extensions = extensions.keys.reject { |k| k.start_with?("http://", "https://") }
-    if bad_extensions.present?
-      errors.add(:extensions, "unrecognized fields #{bad_extensions.to_json} -- extensions property keys must be namespaced (URIs)")
     end
   end
 
@@ -174,6 +180,11 @@ class Lti::AssetReport < ApplicationRecord
     "#{result.first(15)}…"
   end
 
+  def visible_to_user?(user)
+    (visible_to_owner && asset.submission.user_id == user.id) ||
+      asset.submission.assignment.context.grants_any_right?(user, :manage_grades, :view_all_grades)
+  end
+
   # Returns all reports for the given asset processor and submission IDs.
   # Returns reports by submission, hash of form:
   #   submission_id => {
@@ -184,7 +195,7 @@ class Lti::AssetReport < ApplicationRecord
   #           { id: report2.id, title: report2.title, ... },
   #         ],
   # ...
-  def self.info_for_display_by_submission(submission_ids:)
+  def self.info_for_display_by_submission(submission_ids:, for_student: false)
     reports_by_submission = {}
 
     if submission_ids.present?
@@ -193,6 +204,8 @@ class Lti::AssetReport < ApplicationRecord
         .for_active_processors
         .for_submissions(submission_ids)
         .select("lti_asset_reports.*, lti_assets.submission_id as asset_sub_id, lti_assets.attachment_id as asset_att_id")
+
+      scope = scope.where(visible_to_owner: true) if for_student
 
       scope.find_each do |report|
         sub_reports = (reports_by_submission[report.asset_sub_id] ||= {})

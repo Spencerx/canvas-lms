@@ -390,7 +390,8 @@ RSpec.describe ApplicationController do
                               cache_key: "key",
                               uuid: "bleh",
                               salesforce_id: "blah",
-                              horizon_domain: nil)
+                              horizon_domain: nil,
+                              suppress_assignments?: false)
         allow(root_account).to receive(:kill_joy?).and_return(false)
         allow(HostUrl).to receive_messages(file_host: "files.example.com")
         controller.instance_variable_set(:@domain_root_account, root_account)
@@ -412,7 +413,8 @@ RSpec.describe ApplicationController do
                               cache_key: "key",
                               uuid: "blah",
                               salesforce_id: "bleh",
-                              horizon_domain: nil)
+                              horizon_domain: nil,
+                              suppress_assignments?: false)
         allow(root_account).to receive(:kill_joy?).and_return(true)
         allow(HostUrl).to receive_messages(file_host: "files.example.com")
         controller.instance_variable_set(:@domain_root_account, root_account)
@@ -2532,6 +2534,12 @@ RSpec.describe ApplicationController do
       it "returns true on modules page" do
         controller.params[:controller] = "context_modules"
         controller.params[:action] = "index"
+        expect(controller.send(:show_student_view_button?)).to be_truthy
+      end
+
+      it "returns true on files_v2 page" do
+        controller.params[:controller] = "files"
+        controller.params[:action] = "react_files"
         expect(controller.send(:show_student_view_button?)).to be_truthy
       end
 
