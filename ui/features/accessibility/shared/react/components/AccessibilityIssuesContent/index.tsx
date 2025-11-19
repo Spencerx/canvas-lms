@@ -30,6 +30,8 @@ import {Link} from '@instructure/ui-link'
 import {Flex} from '@instructure/ui-flex'
 import {Spinner} from '@instructure/ui-spinner'
 import {FormFieldMessage} from '@instructure/ui-form-field'
+import {IconExternalLinkLine} from '@instructure/ui-icons'
+import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 
 import {AccessibilityCheckerContext} from '../../contexts/AccessibilityCheckerContext'
 import {useNextResource} from '../../hooks/useNextResource'
@@ -378,7 +380,7 @@ const AccessibilityIssuesContent: React.FC<AccessibilityIssuesDrawerContentProps
       <Flex as="div" direction="column" height={pageView ? 'auto' : '100%'} width="100%">
         <Flex.Item
           as="header"
-          padding="small medium 0"
+          padding="small small 0"
           elementRef={(el: Element | null) => {
             regionRef.current = el as HTMLDivElement | null
           }}
@@ -411,15 +413,29 @@ const AccessibilityIssuesContent: React.FC<AccessibilityIssuesDrawerContentProps
             </Flex.Item>
           </Flex>
         </Flex.Item>
-        <Flex.Item as="main" padding="x-small medium" shouldGrow={true} overflowY="auto">
+        <Flex.Item as="main" padding="x-small small" shouldGrow={true} overflowY="auto">
           <Flex justifyItems="space-between">
             <Text weight="weightImportant">{I18n.t('Problem area')}</Text>
             <Flex gap="small">
-              <Link href={current.resource.resourceUrl} variant="standalone">
+              <Link
+                href={current.resource.resourceUrl}
+                variant="standalone"
+                target="_blank"
+                iconPlacement="end"
+                renderIcon={<IconExternalLinkLine size="x-small" />}
+              >
                 {I18n.t('Open Page')}
+                <ScreenReaderContent>{I18n.t('- Opens in a new tab.')}</ScreenReaderContent>
               </Link>
-              <Link href={`${current.resource.resourceUrl}/edit`} variant="standalone">
+              <Link
+                href={`${current.resource.resourceUrl}/edit`}
+                variant="standalone"
+                target="_blank"
+                iconPlacement="end"
+                renderIcon={<IconExternalLinkLine size="x-small" />}
+              >
                 {I18n.t('Edit Page')}
+                <ScreenReaderContent>{I18n.t('- Opens in a new tab.')}</ScreenReaderContent>
               </Link>
             </Flex>
           </Flex>
@@ -471,23 +487,23 @@ const AccessibilityIssuesContent: React.FC<AccessibilityIssuesDrawerContentProps
             </View>
           )}
         </Flex.Item>
-        <Flex.Item as="footer">
-          <AccessibilityIssuesDrawerFooter
-            nextButtonName={I18n.t('Save & Next')}
-            onSkip={handleSkip}
-            onBack={handlePrevious}
-            onSaveAndNext={isApplyButtonHidden ? handleApplyAndSaveAndNext : handleSaveAndNext}
-            isBackDisabled={currentIssueIndex === 0 || isFormLocked}
-            isSkipDisabled={currentIssueIndex === issues.length - 1 || isFormLocked}
-            isSaveAndNextDisabled={
-              (!isRemediated && !isApplyButtonHidden) ||
-              isFormLocked ||
-              !!formError ||
-              !isSaveButtonEnabled
-            }
-          />
-        </Flex.Item>
       </Flex>
+      <View as="div" position="sticky" insetBlockEnd="0" style={{zIndex: 10}}>
+        <AccessibilityIssuesDrawerFooter
+          nextButtonName={I18n.t('Save & Next')}
+          onSkip={handleSkip}
+          onBack={handlePrevious}
+          onSaveAndNext={isApplyButtonHidden ? handleApplyAndSaveAndNext : handleSaveAndNext}
+          isBackDisabled={currentIssueIndex === 0 || isFormLocked}
+          isSkipDisabled={currentIssueIndex === issues.length - 1 || isFormLocked}
+          isSaveAndNextDisabled={
+            (!isRemediated && !isApplyButtonHidden) ||
+            isFormLocked ||
+            !!formError ||
+            !isSaveButtonEnabled
+          }
+        />
+      </View>
       <Alert screenReaderOnly={true} liveRegionPoliteness="assertive" liveRegion={getLiveRegion}>
         {assertiveAlertMessage || ''}
       </Alert>
